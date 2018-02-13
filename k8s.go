@@ -44,15 +44,17 @@ func getContexts(kubeCtl string) string {
 	startingNum := 0
 	// remove header from cli output
 	lines = append(lines[:0], lines[0+1:]...)
+	// remove the last slice which is empty
+	lines = lines[:len(lines)-1]
+
 	for _, l := range lines {
 		startingNum++
-		//fmt.Println(startingNum, l)
 		contextsReturn[startingNum] = []string{l}
 	}
-	//fmt.Println(contextsReturn[1])
+
 	contextsTable := tablewriter.NewWriter(os.Stdout)
 	contextsTable.SetHeader([]string{"", "Contexts"})
-	// now
+
 	var keys []int
 	for k := range contextsReturn {
 		keys = append(keys, k)
