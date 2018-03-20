@@ -18,6 +18,7 @@ import (
 
 var (
 	kubeCtl = "/Users/daveo/KUBE/google-cloud-sdk/bin/kubectl"
+	gcloud  = "/Users/daveo/KUBE/google-cloud-sdk/bin/gcloud"
 )
 
 func main() {
@@ -26,19 +27,68 @@ func main() {
 
 	// print usage
 	if len(args[1:]) < 1 {
-		fmt.Println("Usage: ", args[0], "-c (change context) || -p (generate token for proxy auth)")
+		fmt.Println("Usage: ", args[0], "-p (change project) || -c (change context) || -t (generate token for proxy auth)")
 		os.Exit(0)
 	}
 
 	if args[1] == "-c" {
 		context := getContexts(kubeCtl)
 		setContext(context)
-	} else if args[1] == "-p" {
+	} else if args[1] == "-t" {
 		defaultSecret := getDefaultSecret()
 		defaultToken := getDefaultToken(defaultSecret)
 		decodeToken(defaultToken)
+	} else if args[1] == "-p" {
+		project := getProjects(gcloud)
+		fmt.Println(project)
 
 	}
+}
+
+func getProjects(gcloud string) string {
+	filter := `--format=value(name.scope())`
+	//out, err := exec.Command(gcloud, "config", "configurations", "list", "--format='value(name.scope())'").Output()
+	out, err := exec.Command(gcloud, "config", "configurations", "list", filter).Output()
+	if err != nil {
+		log.Fatal(err)
+	}
+	dat := string(out)
+
+	lines := strings.Split(dat, "\n")
+
+	contextsReturn := map[int][]string{}
+	startingNum := 0
+	// remove header from cli output
+	//lines = append(lines[:0], lines[0+1:]...)
+	// remove the last slice which is empty
+	lines = lines[:len(lines)-1]
+
+	for _, l := range lines {
+		startingNum++
+		contextsReturn[startingNum] = []string{l}
+	}
+
+	contextsTable := tablewriter.NewWriter(os.Stdout)
+	contextsTable.SetHeader([]string{"", "Configurations"})
+
+	var keys []int
+	for k := range contextsReturn {
+		keys = append(keys, k)
+	}
+	sort.Ints(keys)
+	for _, k := range keys {
+		contextsTable.Append([]string{strconv.Itoa(k), contextsReturn[k][0]})
+	}
+	contextsTable.Render()
+	reader := bufio.NewReader(os.Stdin)
+	fmt.Print("Context to use? ")
+	contextsIndex, _ := reader.ReadString('\n')
+
+	contextChoice, erry := strconv.Atoi(strings.TrimSpace(contextsIndex))
+	if erry != nil {
+		fmt.Println("Error:", err)
+	}
+	return (contextsReturn[contextChoice][0])
 }
 
 func BytesToString(data []byte) string {
@@ -133,7 +183,7 @@ func getContexts(kubeCtl string) string {
 	contextsReturn := map[int][]string{}
 	startingNum := 0
 	// remove header from cli output
-	lines = append(lines[:0], lines[0+1:]...)
+	// lines = append(lines[:0], lines[0+1:]...)
 	// remove the last slice which is empty
 	lines = lines[:len(lines)-1]
 
