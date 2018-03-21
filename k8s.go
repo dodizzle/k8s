@@ -40,9 +40,16 @@ func main() {
 		decodeToken(defaultToken)
 	} else if args[1] == "-p" {
 		project := getProjects(gcloud)
-		fmt.Println(project)
-
+		setProject(project, gcloud)
 	}
+}
+
+func setProject(project string, gcloud string) {
+	out, err := exec.Command(gcloud, "config", "configurations", "activate", project).Output()
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(string(out))
 }
 
 func getProjects(gcloud string) string {
