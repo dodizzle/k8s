@@ -18,7 +18,7 @@ import (
 
 var (
 	kubeCtl = "kubectl"
-	gcloud  = "/Users/daveo/KUBE/google-cloud-sdk/bin/gcloud"
+	gcloud  = "gcloud"
 )
 
 func main() {
