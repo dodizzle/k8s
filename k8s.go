@@ -17,7 +17,7 @@ import (
 )
 
 var (
-	kubeCtl = "/Users/daveo/KUBE/google-cloud-sdk/bin/kubectl"
+	kubeCtl = "kubectl"
 	gcloud  = "/Users/daveo/KUBE/google-cloud-sdk/bin/gcloud"
 )
 
@@ -33,10 +33,10 @@ func main() {
 
 	if args[1] == "-c" {
 		context := getContexts(kubeCtl)
-		setContext(context)
+		setContext(context, kubeCtl)
 	} else if args[1] == "-t" {
-		defaultSecret := getDefaultSecret()
-		defaultToken := getDefaultToken(defaultSecret)
+		defaultSecret := getDefaultSecret(kubeCtl)
+		defaultToken := getDefaultToken(defaultSecret, kubeCtl)
 		decodeToken(defaultToken)
 	} else if args[1] == "-p" {
 		project := getProjects(gcloud)
@@ -113,8 +113,8 @@ func decodeToken(defaultToken string) {
 	fmt.Println(cleanToken)
 }
 
-func getDefaultToken(defaultSecret string) string {
-	out, err := exec.Command("/Users/daveo/KUBE/google-cloud-sdk/bin/kubectl", "get", "secret", defaultSecret, "-o", "json").Output()
+func getDefaultToken(defaultSecret string, kubeCtl string) string {
+	out, err := exec.Command(kubeCtl, "get", "secret", defaultSecret, "-o", "json").Output()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -145,8 +145,8 @@ func getDefaultToken(defaultSecret string) string {
 	return result.Data.Token
 }
 
-func getDefaultSecret() string {
-	out, err := exec.Command("/Users/daveo/KUBE/google-cloud-sdk/bin/kubectl", "get", "sa", "default", "-o", "json").Output()
+func getDefaultSecret(kubeCtl string) string {
+	out, err := exec.Command(kubeCtl, "get", "sa", "default", "-o", "json").Output()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -170,8 +170,8 @@ func getDefaultSecret() string {
 	return result.Secrets[0].Name
 }
 
-func setContext(context string) {
-	out, err := exec.Command("/Users/daveo/KUBE/google-cloud-sdk/bin/kubectl", "config", "use-context", context).Output()
+func setContext(context string, kubeCtl string) {
+	out, err := exec.Command(kubeCtl, "config", "use-context", context).Output()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -179,7 +179,7 @@ func setContext(context string) {
 }
 
 func getContexts(kubeCtl string) string {
-	out, err := exec.Command("/Users/daveo/KUBE/google-cloud-sdk/bin/kubectl", "config", "get-contexts", "-o", "name").Output()
+	out, err := exec.Command(kubeCtl, "config", "get-contexts", "-o", "name").Output()
 	if err != nil {
 		log.Fatal(err)
 	}
