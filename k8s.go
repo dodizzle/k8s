@@ -34,6 +34,7 @@ func main() {
 	if args[1] == "-c" {
 		context := getContexts(kubeCtl)
 		setContext(context, kubeCtl)
+		printCurrentCluster(kubeCtl)
 	} else if args[1] == "-t" {
 		defaultSecret := getDefaultSecret(kubeCtl)
 		defaultToken := getDefaultToken(defaultSecret, kubeCtl)
@@ -41,11 +42,29 @@ func main() {
 	} else if args[1] == "-p" {
 		project := getProjects(gcloud)
 		setProject(project, gcloud)
+		printCurrentProject(gcloud)
+
 	}
 }
 
 func setProject(project string, gcloud string) {
 	out, err := exec.Command(gcloud, "config", "configurations", "activate", project).Output()
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(string(out))
+}
+
+func printCurrentCluster(kubeCtl string) {
+	out, err := exec.Command(kubeCtl, "config", "get-contexts").Output()
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(string(out))
+}
+
+func printCurrentProject(gcloud string) {
+	out, err := exec.Command(gcloud, "config", "configurations", "list").Output()
 	if err != nil {
 		log.Fatal(err)
 	}
