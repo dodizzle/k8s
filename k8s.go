@@ -27,11 +27,17 @@ func main() {
 
 	// print usage
 	if len(args[1:]) < 1 {
-		fmt.Println("Usage: ", args[0], "-p (change project) || -c (change context) || -t (generate token for proxy auth)")
+		fmt.Println("Usage: ", args[0], `
+		 -cn (change namespace)
+		 -cc (change context)
+		 -cp (change project)
+		 -lc (list contexts)
+		 -lg (list google configurations)
+		 -t (generate token for proxy auth)`)
 		os.Exit(0)
 	}
 
-	if args[1] == "-c" {
+	if args[1] == "-cc" {
 		context := getContexts(kubeCtl)
 		setContext(context, kubeCtl)
 		printCurrentCluster(kubeCtl)
@@ -39,12 +45,112 @@ func main() {
 		defaultSecret := getDefaultSecret(kubeCtl)
 		defaultToken := getDefaultToken(defaultSecret, kubeCtl)
 		decodeToken(defaultToken)
-	} else if args[1] == "-p" {
+	} else if args[1] == "-cp" {
 		project := getProjects(gcloud)
 		setProject(project, gcloud)
 		printCurrentProject(gcloud)
-
+	} else if args[1] == "-cn" {
+		context := currentContext(kubeCtl)
+		namespace := getNameSpaces(kubeCtl, context)
+		setNameSpace(kubeCtl, context, namespace)
+	} else if args[1] == "-lc" {
+		printCurrentCluster(kubeCtl)
+	} else if args[1] == "-lg" {
+		printCurrentProject(gcloud)
 	}
+}
+
+func setNameSpace(kubeCtl string, context string, namespace string) {
+	newNamespace := "--namespace=" + namespace
+	fmt.Println(newNamespace)
+	fmt.Println(context)
+	out, err := exec.Command(kubeCtl, "config", "set-context", strings.TrimSpace(context), strings.TrimSpace(newNamespace)).Output()
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(string(out))
+}
+
+func currentContext(kubeCtl string) string {
+	out, err := exec.Command(kubeCtl, "config", "current-context").Output()
+	if err != nil {
+		log.Fatal(err)
+	}
+	return (string(out))
+}
+
+func getNameSpaces(kubeCtl string, context string) string {
+	out, err := exec.Command(kubeCtl, "get", "namespaces", "-o", "name").Output()
+	if err != nil {
+		log.Fatal(err)
+	}
+	dat := string(out)
+
+	lines := strings.Split(dat, "\n")
+
+	contextsReturn := map[int][]string{}
+	startingNum := 0
+	// remove header from cli output
+	// lines = append(lines[:0], lines[0+1:]...)
+	// remove the last slice which is empty
+	lines = lines[:len(lines)-1]
+
+	for _, l := range lines {
+		startingNum++
+		contextsReturn[startingNum] = []string{strings.Replace(l, "namespaces/", "", -1)}
+	}
+
+	contextsTable := tablewriter.NewWriter(os.Stdout)
+	contextsTable.SetHeader([]string{"", "NameSpaces"})
+
+	var keys []int
+	for k := range contextsReturn {
+		keys = append(keys, k)
+	}
+	sort.Ints(keys)
+	for _, k := range keys {
+		contextsTable.Append([]string{strconv.Itoa(k), contextsReturn[k][0]})
+	}
+	contextsTable.Render()
+	reader := bufio.NewReader(os.Stdin)
+	fmt.Print("NameSpace to use? ")
+	contextsIndex, _ := reader.ReadString('\n')
+
+	contextChoice, erry := strconv.Atoi(strings.TrimSpace(contextsIndex))
+	if erry != nil {
+		fmt.Println("Error:", err)
+	}
+	return (contextsReturn[contextChoice][0])
+}
+
+// gcloud config set project $gcloud_project
+func setGoogleProject(gcloud string, projectname string) {
+	out, err := exec.Command(gcloud, "config", "set", "project", projectname).Output()
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(string(out))
+}
+
+func printGcloudAuth(gcloud string) {
+	out, err := exec.Command(gcloud, "auth", "list").Output()
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(string(out))
+}
+
+func activateServiceAccount(gcloud string) {
+	reader := bufio.NewReader(os.Stdin)
+	fmt.Print("Service Account .json file to use? ")
+	text, _ := reader.ReadString('\n')
+	fmt.Println(strings.TrimSpace(text))
+	jsonFile := "--key-file=" + strings.TrimSpace(text)
+	out, err := exec.Command(gcloud, "auth", "activate-service-account", jsonFile).Output()
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(string(out))
 }
 
 func setProject(project string, gcloud string) {
@@ -79,21 +185,15 @@ func getProjects(gcloud string) string {
 		log.Fatal(err)
 	}
 	dat := string(out)
-
 	lines := strings.Split(dat, "\n")
-
 	contextsReturn := map[int][]string{}
 	startingNum := 0
-	// remove header from cli output
-	//lines = append(lines[:0], lines[0+1:]...)
 	// remove the last slice which is empty
 	lines = lines[:len(lines)-1]
-
 	for _, l := range lines {
 		startingNum++
 		contextsReturn[startingNum] = []string{l}
 	}
-
 	contextsTable := tablewriter.NewWriter(os.Stdout)
 	contextsTable.SetHeader([]string{"", "Configurations"})
 
@@ -117,6 +217,7 @@ func getProjects(gcloud string) string {
 	return (contextsReturn[contextChoice][0])
 }
 
+// BytesToString converts bytes to a string
 func BytesToString(data []byte) string {
 	return string(data[:])
 }
