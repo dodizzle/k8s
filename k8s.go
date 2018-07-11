@@ -32,7 +32,7 @@ func main() {
 		 -cc (change context)
 		 -cp (change project)
 		 -lc (list contexts)
-		 -lg (list google configurations)
+		 -lp (list google projects)
 		 -t (generate token for proxy auth)`)
 		os.Exit(0)
 	}
@@ -55,7 +55,7 @@ func main() {
 		setNameSpace(kubeCtl, context, namespace)
 	} else if args[1] == "-lc" {
 		printCurrentCluster(kubeCtl)
-	} else if args[1] == "-lg" {
+	} else if args[1] == "-lp" {
 		printCurrentProject(gcloud)
 	}
 }
