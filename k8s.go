@@ -32,6 +32,7 @@ func main() {
 		 -cc (change context)
 		 -cp (change project)
 		 -lc (list contexts)
+		 -ln (list namespaces)
 		 -lp (list google projects)
 		 -t (generate token for proxy auth)`)
 		os.Exit(0)
@@ -57,6 +58,8 @@ func main() {
 		printCurrentCluster(kubeCtl)
 	} else if args[1] == "-lp" {
 		printCurrentProject(gcloud)
+	} else if args[1] == "-ln" {
+		printNameSpaces(kubeCtl)
 	}
 }
 
@@ -97,7 +100,7 @@ func getNameSpaces(kubeCtl string, context string) string {
 
 	for _, l := range lines {
 		startingNum++
-		contextsReturn[startingNum] = []string{strings.Replace(l, "namespaces/", "", -1)}
+		contextsReturn[startingNum] = []string{strings.Replace(l, "namespace/", "", -1)}
 	}
 
 	contextsTable := tablewriter.NewWriter(os.Stdout)
@@ -163,6 +166,14 @@ func setProject(project string, gcloud string) {
 
 func printCurrentCluster(kubeCtl string) {
 	out, err := exec.Command(kubeCtl, "config", "get-contexts").Output()
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(string(out))
+}
+
+func printNameSpaces(kubeCtl string) {
+	out, err := exec.Command(kubeCtl, "get", "namespaces").Output()
 	if err != nil {
 		log.Fatal(err)
 	}
