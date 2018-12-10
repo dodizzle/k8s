@@ -34,6 +34,7 @@ func main() {
 		 -lc (list contexts)
 		 -ln (list namespaces)
 		 -lp (list google projects)
+		 -rc (rename context)
 		 -t (generate token for proxy auth)`)
 		os.Exit(0)
 	}
@@ -41,6 +42,10 @@ func main() {
 	if args[1] == "-cc" {
 		context := getContexts(kubeCtl)
 		setContext(context, kubeCtl)
+		printCurrentCluster(kubeCtl)
+	} else if args[1] == "-rc" {
+		context := getContexts(kubeCtl)
+		renameContext(context, kubeCtl)
 		printCurrentCluster(kubeCtl)
 	} else if args[1] == "-t" {
 		defaultSecret := getDefaultSecret(kubeCtl)
@@ -61,6 +66,17 @@ func main() {
 	} else if args[1] == "-ln" {
 		printNameSpaces(kubeCtl)
 	}
+}
+
+func renameContext(context string, kubeCtl string) string {
+	reader := bufio.NewReader(os.Stdin)
+	fmt.Print("New context name? ")
+	input, _ := reader.ReadString('\n')
+	out, err := exec.Command(kubeCtl, "config", "rename-context", strings.TrimSpace(context), strings.TrimSpace(input)).Output()
+	if err != nil {
+		log.Fatal(err)
+	}
+	return (string(out))
 }
 
 func setNameSpace(kubeCtl string, context string, namespace string) {
