@@ -31,6 +31,7 @@ func main() {
 		 -cn (change namespace)
 		 -cc (change context)
 		 -cp (change project)
+		 -dc (delete context)
 		 -lc (list contexts)
 		 -ln (list namespaces)
 		 -lp (list google projects)
@@ -42,6 +43,10 @@ func main() {
 	if args[1] == "-cc" {
 		context := getContexts(kubeCtl)
 		setContext(context, kubeCtl)
+		printCurrentCluster(kubeCtl)
+	} else if args[1] == "-dc" {
+		context := getContexts(kubeCtl)
+		deleteContext(context, kubeCtl)
 		printCurrentCluster(kubeCtl)
 	} else if args[1] == "-rc" {
 		context := getContexts(kubeCtl)
@@ -319,6 +324,14 @@ func getDefaultSecret(kubeCtl string) string {
 
 func setContext(context string, kubeCtl string) {
 	out, err := exec.Command(kubeCtl, "config", "use-context", context).Output()
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(string(out))
+}
+
+func deleteContext(context string, kubeCtl string) {
+	out, err := exec.Command(kubeCtl, "config", "delete-context", context).Output()
 	if err != nil {
 		log.Fatal(err)
 	}
