@@ -29,4 +29,3 @@ Aliases: .bash_profile
 		alias N="kubectl get nodes"
 
 		alias S="kubectl get pods --sort-by=.status.startTime"
-fooff
