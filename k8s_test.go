@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/base64"
 	"testing"
 )
 
@@ -152,20 +151,6 @@ func TestValidateSelectionEmptyMap(t *testing.T) {
 	_, err := validateSelection("1", items)
 	if err == nil {
 		t.Error("validateSelection on empty map should return error")
-	}
-}
-
-func TestDecodeToken(t *testing.T) {
-	// decodeToken prints to stdout; we just verify the base64 round-trip
-	// that it relies on internally
-	original := "my-secret-token-value"
-	encoded := base64.StdEncoding.EncodeToString([]byte(original))
-	decoded, err := base64.StdEncoding.DecodeString(encoded)
-	if err != nil {
-		t.Fatalf("unexpected decode error: %v", err)
-	}
-	if string(decoded) != original {
-		t.Errorf("decoded = %q, want %q", string(decoded), original)
 	}
 }
 

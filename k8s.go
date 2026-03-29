@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -11,7 +10,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/olekukonko/tablewriter"
 )
@@ -28,16 +26,20 @@ func main() {
 	// print usage
 	if len(args[1:]) < 1 {
 		fmt.Println("Usage: ", args[0], `
-		 -cn (change namespace)
 		 -cc (change context)
+		 -cn (change namespace)
 		 -cp (change project)
 		 -dc (delete context)
+		 -dp (delete gcloud configuration)
+		 -gc (get cluster credentials)
 		 -lc (list contexts)
+		 -lk (list GKE clusters)
 		 -ln (list namespaces)
 		 -lp (list google projects)
 		 -rc (rename context)
 		 -rp (rename gcloud configuration)
-		 -t (generate token for proxy auth)`)
+		 -sc (show current context, namespace, and project)
+		 -t (generate token)`)
 		os.Exit(0)
 	}
 
@@ -54,10 +56,15 @@ func main() {
 		context := getContexts(kubeCtl)
 		renameContext(context, kubeCtl)
 		printCurrentCluster(kubeCtl)
+	case "-dp":
+		project := getProjects(gcloud)
+		deleteProject(project, gcloud)
+		printCurrentProject(gcloud)
+	case "-gc":
+		getClusterCredentials(gcloud)
+		printCurrentCluster(kubeCtl)
 	case "-t":
-		defaultSecret := getDefaultSecret(kubeCtl)
-		defaultToken := getDefaultToken(defaultSecret, kubeCtl)
-		decodeToken(defaultToken)
+		generateToken(kubeCtl)
 	case "-cp":
 		project := getProjects(gcloud)
 		setProject(project, gcloud)
@@ -72,10 +79,14 @@ func main() {
 		setNameSpace(kubeCtl, context, namespace)
 	case "-lc":
 		printCurrentCluster(kubeCtl)
+	case "-lk":
+		listClusters(gcloud)
 	case "-lp":
 		printCurrentProject(gcloud)
 	case "-ln":
 		printNameSpaces(kubeCtl)
+	case "-sc":
+		showCurrent(kubeCtl, gcloud)
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown flag: %s\n", args[1])
 		os.Exit(1)
@@ -350,72 +361,162 @@ func validateSelection(input string, items map[int][]string) (string, error) {
 	return val[0], nil
 }
 
-func decodeToken(defaultToken string) {
-	data, err := base64.StdEncoding.DecodeString(defaultToken)
+func generateToken(kubeCtl string) {
+	// List service accounts and let user pick one
+	out, err := exec.Command(kubeCtl, "get", "serviceaccounts", "-o", "name").Output()
 	if err != nil {
-		fmt.Println("error:", err)
+		log.Fatalf("Failed to list service accounts: %v\nIs your kubectl context connected to a cluster?", err)
+	}
+
+	lines := parseLines(string(out), "serviceaccount/")
+	if len(lines) == 0 {
+		fmt.Println("No service accounts found in the current namespace.")
+		os.Exit(0)
+	}
+
+	items := buildNumberedMap(lines)
+
+	t := tablewriter.NewTable(os.Stdout)
+	t.Header("", "Service Accounts")
+	var keys []int
+	for k := range items {
+		keys = append(keys, k)
+	}
+	sort.Ints(keys)
+	for _, k := range keys {
+		t.Append(strconv.Itoa(k), items[k][0])
+	}
+	t.Render()
+
+	reader := bufio.NewReader(os.Stdin)
+	fmt.Print("Service account to generate token for? ")
+	input, _ := reader.ReadString('\n')
+
+	sa, err := validateSelection(input, items)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	token, err := exec.Command(kubeCtl, "create", "token", sa).Output()
+	if err != nil {
+		log.Fatalf("Failed to create token for %q: %v", sa, err)
+	}
+	fmt.Println("Copy and paste this:")
+	fmt.Println(strings.TrimSpace(string(token)))
+}
+
+func deleteProject(name string, gcloud string) {
+	out, err := exec.Command(gcloud, "config", "configurations", "delete", name, "--quiet").Output()
+	if err != nil {
+		log.Fatalf("Failed to delete configuration %q: %v\nNote: you cannot delete the active configuration.", name, err)
+	}
+	fmt.Println(string(out))
+}
+
+func showCurrent(kubeCtl string, gcloud string) {
+	// current context
+	ctx, err := exec.Command(kubeCtl, "config", "current-context").Output()
+	if err != nil {
+		fmt.Println("Context:   (none)")
+	} else {
+		fmt.Printf("Context:   %s", string(ctx))
+	}
+
+	// current namespace
+	ns, err := exec.Command(kubeCtl, "config", "view", "--minify", "--output=jsonpath={.contexts[0].context.namespace}").Output()
+	if err != nil || strings.TrimSpace(string(ns)) == "" {
+		fmt.Println("Namespace: default")
+	} else {
+		fmt.Printf("Namespace: %s\n", strings.TrimSpace(string(ns)))
+	}
+
+	// current gcloud project
+	proj, err := exec.Command(gcloud, "config", "get-value", "project").Output()
+	if err != nil || strings.TrimSpace(string(proj)) == "" {
+		fmt.Println("Project:   (unset)")
+	} else {
+		fmt.Printf("Project:   %s\n", strings.TrimSpace(string(proj)))
+	}
+
+	// current gcloud account
+	acct, err := exec.Command(gcloud, "config", "get-value", "account").Output()
+	if err != nil || strings.TrimSpace(string(acct)) == "" {
+		fmt.Println("Account:   (unset)")
+	} else {
+		fmt.Printf("Account:   %s\n", strings.TrimSpace(string(acct)))
+	}
+}
+
+func listClusters(gcloud string) {
+	out, err := exec.Command(gcloud, "container", "clusters", "list").Output()
+	if err != nil {
+		log.Fatalf("Failed to list GKE clusters: %v\nIs gcloud configured with a project?", err)
+	}
+	if strings.TrimSpace(string(out)) == "" {
+		fmt.Println("No GKE clusters found in the current project.")
 		return
 	}
-	cleanToken := BytesToString(data)
-	fmt.Println("Copy and paste this:")
-	fmt.Println(cleanToken)
+	fmt.Println(string(out))
 }
 
-func getDefaultToken(defaultSecret string, kubeCtl string) string {
-	out, err := exec.Command(kubeCtl, "get", "secret", defaultSecret, "-o", "json").Output()
+func getClusterCredentials(gcloud string) {
+	// list clusters in current project
+	out, err := exec.Command(gcloud, "container", "clusters", "list", "--format=value(name,zone)").Output()
 	if err != nil {
-		log.Fatalf("Failed to get secret %q: %v", defaultSecret, err)
+		log.Fatalf("Failed to list GKE clusters: %v\nIs gcloud configured with a project?", err)
 	}
-	type AutoGenerated struct {
-		APIVersion string `json:"apiVersion"`
-		Data       struct {
-			CaCrt     string `json:"ca.crt"`
-			Namespace string `json:"namespace"`
-			Token     string `json:"token"`
-		} `json:"data"`
-		Kind     string `json:"kind"`
-		Metadata struct {
-			Annotations struct {
-				KubernetesIoServiceAccountName string `json:"kubernetes.io/service-account.name"`
-				KubernetesIoServiceAccountUID  string `json:"kubernetes.io/service-account.uid"`
-			} `json:"annotations"`
-			CreationTimestamp time.Time `json:"creationTimestamp"`
-			Name              string    `json:"name"`
-			Namespace         string    `json:"namespace"`
-			ResourceVersion   string    `json:"resourceVersion"`
-			SelfLink          string    `json:"selfLink"`
-			UID               string    `json:"uid"`
-		} `json:"metadata"`
-		Type string `json:"type"`
-	}
-	var result AutoGenerated
-	json.Unmarshal([]byte(out), &result)
-	return result.Data.Token
-}
 
-func getDefaultSecret(kubeCtl string) string {
-	out, err := exec.Command(kubeCtl, "get", "sa", "default", "-o", "json").Output()
+	lines := parseLines(string(out), "")
+	if len(lines) == 0 {
+		fmt.Println("No GKE clusters found in the current project.")
+		os.Exit(0)
+	}
+
+	type clusterInfo struct {
+		name string
+		zone string
+	}
+	clusters := []clusterInfo{}
+	items := map[int][]string{}
+	for i, l := range lines {
+		parts := strings.Fields(l)
+		if len(parts) >= 2 {
+			clusters = append(clusters, clusterInfo{name: parts[0], zone: parts[1]})
+			items[i+1] = []string{parts[0] + " (" + parts[1] + ")"}
+		}
+	}
+
+	t := tablewriter.NewTable(os.Stdout)
+	t.Header("", "Cluster", "Zone")
+	for i, c := range clusters {
+		t.Append(strconv.Itoa(i+1), c.name, c.zone)
+	}
+	t.Render()
+
+	reader := bufio.NewReader(os.Stdin)
+	fmt.Print("Cluster to get credentials for? ")
+	input, _ := reader.ReadString('\n')
+
+	selection, err := validateSelection(input, items)
 	if err != nil {
-		log.Fatalf("Failed to get default service account: %v\nIs your kubectl context connected to a cluster?", err)
+		log.Fatal(err)
 	}
-	type AutoGenerated struct {
-		APIVersion string `json:"apiVersion"`
-		Kind       string `json:"kind"`
-		Metadata   struct {
-			CreationTimestamp time.Time `json:"creationTimestamp"`
-			Name              string    `json:"name"`
-			Namespace         string    `json:"namespace"`
-			ResourceVersion   string    `json:"resourceVersion"`
-			SelfLink          string    `json:"selfLink"`
-			UID               string    `json:"uid"`
-		} `json:"metadata"`
-		Secrets []struct {
-			Name string `json:"name"`
-		} `json:"secrets"`
+
+	// find the matching cluster to get the zone
+	var chosen clusterInfo
+	for _, c := range clusters {
+		if c.name+" ("+c.zone+")" == selection {
+			chosen = c
+			break
+		}
 	}
-	var result AutoGenerated
-	json.Unmarshal([]byte(out), &result)
-	return result.Secrets[0].Name
+
+	fmt.Printf("Getting credentials for %s in %s...\n", chosen.name, chosen.zone)
+	cred, err := exec.Command(gcloud, "container", "clusters", "get-credentials", chosen.name, "--zone", chosen.zone).CombinedOutput()
+	if err != nil {
+		log.Fatalf("Failed to get credentials: %v\n%s", err, string(cred))
+	}
+	fmt.Println(string(cred))
 }
 
 func setContext(context string, kubeCtl string) {
